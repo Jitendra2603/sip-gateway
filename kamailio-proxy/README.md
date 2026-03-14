@@ -9,16 +9,16 @@ A regional SIP gateway (Kamailio + RTPEngine) that sits between the ElevenLabs S
 ## Architecture
 
 ```
-┌──────────────┐     SIP INVITE      ┌──────────────────┐     SIP INVITE      ┌──────────────┐
+┌──────────────┐     SIP INVITE       ┌──────────────────┐     SIP INVITE       ┌──────────────┐
 │              │  ──────────────────► │                  │  ──────────────────► │              │
 │ ElevenLabs   │                      │   SIP Gateway    │                      │ Customer SBC │
 │  SIP Server  │  ◄────────────────── │  (Kamailio +     │  ◄────────────────── │              │
 │              │     SIP Responses    │   RTPEngine)     │     SIP Responses    │              │
 └──────┬───────┘                      └────────┬─────────┘                      └──────┬───────┘
        │                                       │                                       │
-       │            RTP Audio (UDP)             │            RTP Audio (UDP)             │
-       └───────────────────────────────────────►├──────────────────────────────────────►│
-       ◄────────────────────────────────────────┤◄─────────────────────────────────────┘
+       │            RTP Audio (UDP)            │            RTP Audio (UDP)            │
+       └──────────────────────────────────────►├──────────────────────────────────────►│
+       ◄───────────────────────────────────────┤◄──────────────────────────────────────┘
 ```
 
 The gateway is transparent — the ElevenLabs SIP server sends an INVITE to the gateway IP, Kamailio rewrites the destination to the customer's SBC, and RTPEngine anchors all media through the gateway's public IP.
