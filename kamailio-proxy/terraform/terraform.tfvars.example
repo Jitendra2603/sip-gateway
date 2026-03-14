@@ -1,0 +1,24 @@
+project_id = "xi-playground"
+
+# For Turkey use case: GCP has no Turkey region yet (announced late 2025, no ETA).
+# Nearest options: europe-west1 (Belgium), me-west1 (Tel Aviv), europe-west3 (Frankfurt).
+# For actual Turkey presence, use a Turkish cloud provider or colo and deploy the
+# Docker Compose stack directly (skip terraform, just run docker-compose on the host).
+region = "europe-west1"
+zone   = "europe-west1-b"
+
+instance_name = "sip-gateway"
+machine_type  = "e2-standard-2"
+
+# LiveKit Cloud has no static IP range, so we allow all for SIP signaling.
+# The Kamailio config can optionally do IP-based ACLs at the application layer.
+allowed_sip_source_ranges = ["0.0.0.0/0"]
+
+ssh_source_ranges = ["0.0.0.0/0"]
+
+labels = {
+  team        = "convai"
+  component   = "sip-gateway"
+  environment = "playground"
+  customer    = "turkey-poc"
+}

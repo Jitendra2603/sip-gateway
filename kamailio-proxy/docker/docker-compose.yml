@@ -1,0 +1,66 @@
+##
+## SIP Gateway — Docker Compose
+##
+## Deploys Kamailio (SIP proxy) + RTPEngine (media relay) as a transparent
+## SIP gateway between LiveKit SIP and a customer's SBC.
+##
+## Required env vars (set in .env or export before running):
+##   EXTERNAL_IP             — public IP of this host (the static GCE IP)
+##   CUSTOMER_SBC_ADDRESS    — customer SBC hostname or IP
+##   CUSTOMER_SBC_PORT       — customer SBC SIP port (default: 5060)
+##
+services:
+  kamailio:
+    build:
+      context: ./kamailio
+      dockerfile: Dockerfile
+    container_name: sip-gateway-kamailio
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - EXTERNAL_IP=${EXTERNAL_IP}
+      - CUSTOMER_SBC_ADDRESS=${CUSTOMER_SBC_ADDRESS}
+      - CUSTOMER_SBC_PORT=${CUSTOMER_SBC_PORT:-5060}
+      - AUTH_USER=${AUTH_USER}
+      - AUTH_PASSWORD=${AUTH_PASSWORD}
+      - AUTH_REALM=${AUTH_REALM:-${EXTERNAL_IP}}
+    depends_on:
+      rtpengine:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  rtpengine:
+    build:
+      context: ./rtpengine
+      dockerfile: Dockerfile
+    container_name: sip-gateway-rtpengine
+    network_mode: host
+    restart: unless-stopped
+    # RTPEngine needs NET_ADMIN for iptables-based kernel forwarding (optional)
+    # and NET_RAW for raw socket access
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+    command:
+      - "--foreground"
+      - "--log-stderr"
+      - "--table=-1"
+      - "--interface=pub/${INTERNAL_IP}!${EXTERNAL_IP}"
+      - "--listen-ng=127.0.0.1:22222"
+      - "--port-min=10000"
+      - "--port-max=20000"
+      - "--log-level=6"
+      - "--delete-delay=0"
+      - "--timeout=60"
+      - "--silent-timeout=600"
+      - "--final-timeout=7200"
+      - "--tos=184"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
