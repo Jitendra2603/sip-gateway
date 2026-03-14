@@ -1,7 +1,7 @@
 variable "project_id" {
   description = "GCP project ID"
   type        = string
-  default     = "xi-playground"
+  default     = "your-gcp-project"
 }
 
 variable "region" {
@@ -41,7 +41,7 @@ variable "network" {
 }
 
 variable "allowed_sip_source_ranges" {
-  description = "CIDR ranges allowed to send SIP traffic. Use known LiveKit/ElevenLabs ranges, or 0.0.0.0/0 with digest auth enabled."
+  description = "CIDR ranges allowed to send SIP traffic. Use known ElevenLabs SIP ranges, or 0.0.0.0/0 with digest auth enabled."
   type        = list(string)
   default     = ["199.88.252.0/24", "136.112.48.0/24", "143.223.88.0/21", "161.115.160.0/19"]
 }

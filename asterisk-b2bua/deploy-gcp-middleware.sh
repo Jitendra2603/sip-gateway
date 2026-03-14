@@ -1,15 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-xi-playground}"
+PROJECT_ID="${PROJECT_ID:-your-gcp-project}"
 REGION="${REGION:-us-central1}"
 ZONE="${ZONE:-us-central1-f}"
-INSTANCE_NAME="${INSTANCE_NAME:-xi-sip-middleware-1}"
-ADDRESS_NAME="${ADDRESS_NAME:-xi-sip-middleware-ip}"
-FIREWALL_RULE_NAME="${FIREWALL_RULE_NAME:-xi-sip-middleware-ingress}"
+INSTANCE_NAME="${INSTANCE_NAME:-sip-middleware-1}"
+ADDRESS_NAME="${ADDRESS_NAME:-sip-middleware-ip}"
+FIREWALL_RULE_NAME="${FIREWALL_RULE_NAME:-sip-middleware-ingress}"
 NETWORK="${NETWORK:-default}"
-NETWORK_TAG="${NETWORK_TAG:-xi-sip-middleware}"
-STARTUP_SCRIPT_PATH="${STARTUP_SCRIPT_PATH:-$(pwd)/tmp/sip-middleware/startup-script.sh}"
+NETWORK_TAG="${NETWORK_TAG:-sip-middleware}"
+STARTUP_SCRIPT_PATH="${STARTUP_SCRIPT_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/startup-script.sh}"
 
 TWILIO_TERMINATION_HOST="${TWILIO_TERMINATION_HOST:-replace-me.pstn.twilio.com}"
 TWILIO_TERMINATION_PORT="${TWILIO_TERMINATION_PORT:-5060}"

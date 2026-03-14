@@ -1,6 +1,6 @@
 # SIP Middleware Test Setup (GCP + Asterisk)
 
-This deploys a public SIP middleware VM in `xi-playground` that:
+This deploys a public SIP middleware VM in your GCP project that:
 
 - receives INVITEs from ElevenLabs SIP on `5060` (TCP by default)
 - forwards calls to Twilio Elastic SIP Termination (TCP on `5060` by default)
@@ -12,22 +12,22 @@ This deploys a public SIP middleware VM in `xi-playground` that:
 From repo root:
 
 ```bash
-chmod +x "tmp/sip-middleware/deploy-gcp-middleware.sh"
-PROJECT_ID=xi-playground \
+chmod +x "asterisk-b2bua/deploy-gcp-middleware.sh"
+PROJECT_ID=your-gcp-project \
 TWILIO_TERMINATION_HOST="replace-me.pstn.twilio.com" \
 TWILIO_TERMINATION_PORT=5060 \
-ELEVEN_ALLOW_CIDR="34.22.160.23/32" \
-"tmp/sip-middleware/deploy-gcp-middleware.sh"
+ELEVEN_ALLOW_CIDR="0.0.0.0/0" \
+"asterisk-b2bua/deploy-gcp-middleware.sh"
 ```
 
 Optional auth for Twilio Termination:
 
 ```bash
-PROJECT_ID=xi-playground \
+PROJECT_ID=your-gcp-project \
 TWILIO_TERMINATION_HOST="replace-me.pstn.twilio.com" \
 TWILIO_USERNAME="your-termination-username" \
 TWILIO_PASSWORD="your-termination-password" \
-"tmp/sip-middleware/deploy-gcp-middleware.sh"
+"asterisk-b2bua/deploy-gcp-middleware.sh"
 ```
 
 ## On-Prem Deployment (Turkey / non-GCP)
@@ -37,7 +37,7 @@ Use this when you need the B2BUA physically hosted outside GCP (for example, in-
 ### 1) Copy installer to the target host
 
 ```bash
-scp "tmp/sip-middleware/install-onprem.sh" root@your-host:/tmp/
+scp "asterisk-b2bua/install-onprem.sh" root@your-host:/tmp/
 ssh root@your-host "chmod +x /tmp/install-onprem.sh"
 ```
 
@@ -84,34 +84,34 @@ sudo docker exec sip-middleware asterisk -rx "pjsip show endpoints"
 Optional auth for inbound ElevenLabs -> middleware:
 
 ```bash
-PROJECT_ID=xi-playground \
+PROJECT_ID=your-gcp-project \
 TWILIO_TERMINATION_HOST="your-trunk.pstn.twilio.com" \
 ELEVEN_ALLOW_CIDR="0.0.0.0/0" \
 ELEVEN_USERNAME="your-eleven-sip-user" \
 ELEVEN_PASSWORD="your-eleven-sip-pass" \
-"tmp/sip-middleware/deploy-gcp-middleware.sh"
+"asterisk-b2bua/deploy-gcp-middleware.sh"
 ```
 
 Optional Twilio Origination -> Eleven forwarding:
 
 ```bash
-PROJECT_ID=xi-playground \
+PROJECT_ID=your-gcp-project \
 TWILIO_TERMINATION_HOST="your-trunk.pstn.twilio.com" \
 ELEVEN_FORWARD_HOST="your-eleven-sip-host-or-ip" \
 ELEVEN_FORWARD_PORT=5060 \
-"tmp/sip-middleware/deploy-gcp-middleware.sh"
+"asterisk-b2bua/deploy-gcp-middleware.sh"
 ```
 
 ## Update config after deploy
 
 ```bash
-gcloud compute instances add-metadata "xi-sip-middleware-1" \
-  --project "xi-playground" \
+gcloud compute instances add-metadata "sip-middleware-1" \
+  --project "your-gcp-project" \
   --zone "us-central1-f" \
-  --metadata "twilio_termination_host=your-trunk.pstn.twilio.com,twilio_termination_port=5060,eleven_allow_cidr=34.22.160.23/32,eleven_username=optional-eleven-user,eleven_password=optional-eleven-pass,eleven_forward_host=your-eleven-sip-host-or-ip,eleven_forward_port=5060"
+  --metadata "twilio_termination_host=your-trunk.pstn.twilio.com,twilio_termination_port=5060,eleven_allow_cidr=0.0.0.0/0,eleven_username=optional-eleven-user,eleven_password=optional-eleven-pass,eleven_forward_host=your-eleven-sip-host-or-ip,eleven_forward_port=5060"
 
-gcloud compute ssh "xi-sip-middleware-1" \
-  --project "xi-playground" \
+gcloud compute ssh "sip-middleware-1" \
+  --project "your-gcp-project" \
   --zone "us-central1-f" \
   --tunnel-through-iap \
   --command "sudo systemctl start sip-middleware-render.service && sudo docker exec sip-middleware asterisk -rx 'pjsip show endpoints'"
@@ -131,14 +131,14 @@ For ElevenLabs -> Middleware -> Twilio outbound:
 For Twilio -> Middleware origination testing:
 
 1. Elastic SIP Trunk > **Origination** > add URI:
-   - `sip:<middleware-public-ip>:5060;transport=udp`
+   - `sip:<middleware-public-ip>:5060;transport=tcp`
 2. Weight and priority as desired
 3. Set middleware metadata `eleven_forward_host` to your ElevenLabs SIP host/IP
 4. Re-render middleware config: `sudo systemctl start sip-middleware-render.service`
 
 ## ElevenLabs side
 
-Set outbound SIP trunk `address` to middleware public IP and use transport `udp` or `tcp` on `5060`.
+Set outbound SIP trunk `address` to middleware public IP and use transport `tcp` on `5060`.
 
 For IP allowlists, use CIDR `/32` for a single address (example: `35.225.73.132/32`).
 
@@ -149,7 +149,7 @@ For IP allowlists, use CIDR `/32` for a single address (example: `35.225.73.132/
 
 ## Files
 
-- `tmp/sip-middleware/deploy-gcp-middleware.sh` - GCP provisioning path
-- `tmp/sip-middleware/startup-script.sh` - GCP VM bootstrap + Asterisk config render
-- `tmp/sip-middleware/install-onprem.sh` - non-GCP host installer for same B2BUA flow
-- `tmp/sip-middleware/onprem.env.example` - on-prem config template
+- `deploy-gcp-middleware.sh` — GCP provisioning script
+- `startup-script.sh` — GCE VM bootstrap + Asterisk config render
+- `install-onprem.sh` — On-prem/non-GCP host installer
+- `onprem.env.example` — On-prem config template

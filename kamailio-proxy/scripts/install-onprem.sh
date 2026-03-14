@@ -11,7 +11,7 @@
 ##       --internal-ip <PRIVATE_IP> \
 ##       --customer-sbc <SBC_ADDRESS> \
 ##       [--customer-sbc-port 5060] \
-##       [--auth-user <user> --auth-password <pass> --enable-auth]
+##       [--auth-user <user> --auth-password <pass>]
 ##
 ## If --internal-ip is the same as --external-ip (no NAT), just pass
 ## the same value for both.
@@ -24,7 +24,6 @@ CUSTOMER_SBC_ADDRESS=""
 CUSTOMER_SBC_PORT="5060"
 AUTH_USER=""
 AUTH_PASSWORD=""
-ENABLE_AUTH="false"
 INSTALL_DIR="/opt/sip-gateway"
 
 while [[ $# -gt 0 ]]; do
@@ -35,7 +34,6 @@ while [[ $# -gt 0 ]]; do
         --customer-sbc-port) CUSTOMER_SBC_PORT="$2"; shift 2 ;;
         --auth-user)         AUTH_USER="$2"; shift 2 ;;
         --auth-password)     AUTH_PASSWORD="$2"; shift 2 ;;
-        --enable-auth)       ENABLE_AUTH="true"; shift ;;
         --install-dir)       INSTALL_DIR="$2"; shift 2 ;;
         *)                   echo "Unknown option: $1"; exit 1 ;;
     esac
@@ -63,8 +61,8 @@ if [ -z "$CUSTOMER_SBC_ADDRESS" ]; then
     exit 1
 fi
 
-if [ "$ENABLE_AUTH" = "true" ] && { [ -z "$AUTH_USER" ] || [ -z "$AUTH_PASSWORD" ]; }; then
-    echo "Error: --enable-auth requires both --auth-user and --auth-password"
+if { [ -n "$AUTH_USER" ] && [ -z "$AUTH_PASSWORD" ]; } || { [ -z "$AUTH_USER" ] && [ -n "$AUTH_PASSWORD" ]; }; then
+    echo "Error: --auth-user and --auth-password must both be set or both empty"
     exit 1
 fi
 
@@ -75,7 +73,7 @@ echo "  Internal IP:  $INTERNAL_IP"
 echo "  Customer SBC: $CUSTOMER_SBC_ADDRESS:$CUSTOMER_SBC_PORT"
 echo "  Install dir:  $INSTALL_DIR"
 [ -n "$AUTH_USER" ] && echo "  Auth:         $AUTH_USER / ****"
-echo "  Auth enabled: $ENABLE_AUTH"
+[ -n "$AUTH_USER" ] && echo "  Auth:         $AUTH_USER / ****"
 echo ""
 
 # --- Install Docker if missing ---
@@ -231,8 +229,9 @@ request_route {
     }
 
     if (is_method("INVITE")) {
-        # Uncomment to enable digest auth:
-        # route(AUTH);
+        #!ifdef WITH_AUTH
+        route(AUTH);
+        #!endif
 
         record_route();
         route(RTPMANAGE);
@@ -294,12 +293,6 @@ failure_route[INVITE_FAILURE] {
 }
 KAMCFG
 
-# Toggle digest auth route based on installer flags.
-if [ "$ENABLE_AUTH" = "true" ]; then
-    sed -i 's/^[[:space:]]*# route(AUTH);/        route(AUTH);/' "$INSTALL_DIR/docker/kamailio/kamailio.cfg"
-elif [ -n "$AUTH_USER" ] || [ -n "$AUTH_PASSWORD" ]; then
-    echo ">>> Note: auth credentials provided but --enable-auth not set; INVITEs will not be challenged."
-fi
 
 # --- Write entrypoint ---
 
@@ -309,14 +302,18 @@ set -e
 REALM="${AUTH_REALM:-${EXTERNAL_IP}}"
 SAFE_AUTH_USER="${AUTH_USER:-_disabled_}"
 SAFE_AUTH_PASSWORD="${AUTH_PASSWORD:-_disabled_}"
-sed \
+AUTH_DEFINE=""
+if [ -n "$AUTH_USER" ] && [ "$AUTH_USER" != "" ]; then
+    AUTH_DEFINE="#!define WITH_AUTH"
+fi
+{ echo "$AUTH_DEFINE"; cat /etc/kamailio/kamailio.cfg.template; } | sed \
     -e "s/__EXTERNAL_IP__/${EXTERNAL_IP}/g" \
     -e "s/__CUSTOMER_SBC_ADDRESS__/${CUSTOMER_SBC_ADDRESS}/g" \
     -e "s/__CUSTOMER_SBC_PORT__/${CUSTOMER_SBC_PORT:-5060}/g" \
     -e "s/__AUTH_USER__/${SAFE_AUTH_USER}/g" \
     -e "s/__AUTH_PASSWORD__/${SAFE_AUTH_PASSWORD}/g" \
     -e "s/__AUTH_REALM__/${REALM}/g" \
-    /etc/kamailio/kamailio.cfg.template > /etc/kamailio/kamailio.cfg
+    > /etc/kamailio/kamailio.cfg
 echo "=== Kamailio config generated ==="
 echo "  EXTERNAL_IP:          ${EXTERNAL_IP}"
 echo "  CUSTOMER_SBC_ADDRESS: ${CUSTOMER_SBC_ADDRESS}"

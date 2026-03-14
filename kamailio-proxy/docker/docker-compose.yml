@@ -2,7 +2,7 @@
 ## SIP Gateway — Docker Compose
 ##
 ## Deploys Kamailio (SIP proxy) + RTPEngine (media relay) as a transparent
-## SIP gateway between LiveKit SIP and a customer's SBC.
+## SIP gateway between the ElevenLabs SIP server and a customer's SBC.
 ##
 ## Required env vars (set in .env or export before running):
 ##   EXTERNAL_IP             — public IP of this host (the static GCE IP)

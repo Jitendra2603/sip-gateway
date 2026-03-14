@@ -9,7 +9,7 @@ terraform {
   }
 
   backend "gcs" {
-    bucket = "xi-playground-tf-state"
+    bucket = "your-gcp-project-tf-state"
     prefix = "sip-gateway"
   }
 }

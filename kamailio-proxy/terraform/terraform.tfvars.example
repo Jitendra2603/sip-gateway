@@ -1,4 +1,4 @@
-project_id = "xi-playground"
+project_id = "your-gcp-project"
 
 # For Turkey use case: GCP has no Turkey region yet (announced late 2025, no ETA).
 # Nearest options: europe-west1 (Belgium), me-west1 (Tel Aviv), europe-west3 (Frankfurt).
@@ -10,8 +10,8 @@ zone   = "europe-west1-b"
 instance_name = "sip-gateway"
 machine_type  = "e2-standard-2"
 
-# LiveKit Cloud has no static IP range, so we allow all for SIP signaling.
-# The Kamailio config can optionally do IP-based ACLs at the application layer.
+# ElevenLabs SIP servers may use dynamic IPs, so we allow all for SIP signaling.
+# Enable digest auth in Kamailio for production use.
 allowed_sip_source_ranges = ["0.0.0.0/0"]
 
 ssh_source_ranges = ["0.0.0.0/0"]

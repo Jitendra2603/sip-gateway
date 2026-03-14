@@ -1,8 +1,8 @@
 # SIP Gateway
 
-A regional SIP gateway (Kamailio + RTPEngine) that sits between the LiveKit SIP server and a customer's SBC, providing:
+A regional SIP gateway (Kamailio + RTPEngine) that sits between the ElevenLabs SIP server and a customer's SBC, providing:
 
-1. **Static IP** — customers can whitelist a single IP (solves the LiveKit Cloud dynamic-IP problem for legacy SBCs like Five9)
+1. **Static IP** — customers can whitelist a single IP (solves the dynamic-IP problem for legacy SBCs like Five9)
 2. **Regional presence** — SIP INVITEs originate from within a specific country/region (solves regulatory requirements like Turkey's ban on foreign-origin SIP)
 3. **Media anchoring** — all RTP/audio flows through the gateway, so the customer only needs to peer with one IP
 
@@ -11,8 +11,8 @@ A regional SIP gateway (Kamailio + RTPEngine) that sits between the LiveKit SIP 
 ```
 ┌──────────────┐     SIP INVITE      ┌──────────────────┐     SIP INVITE      ┌──────────────┐
 │              │  ──────────────────► │                  │  ──────────────────► │              │
-│  LiveKit SIP │                      │   SIP Gateway    │                      │ Customer SBC │
-│    Server    │  ◄────────────────── │  (Kamailio +     │  ◄────────────────── │              │
+│ ElevenLabs   │                      │   SIP Gateway    │                      │ Customer SBC │
+│  SIP Server  │  ◄────────────────── │  (Kamailio +     │  ◄────────────────── │              │
 │              │     SIP Responses    │   RTPEngine)     │     SIP Responses    │              │
 └──────┬───────┘                      └────────┬─────────┘                      └──────┬───────┘
        │                                       │                                       │
@@ -21,7 +21,7 @@ A regional SIP gateway (Kamailio + RTPEngine) that sits between the LiveKit SIP 
        ◄────────────────────────────────────────┤◄─────────────────────────────────────┘
 ```
 
-The gateway is transparent — LiveKit SIP sends an INVITE to the gateway IP, Kamailio rewrites the destination to the customer's SBC, and RTPEngine anchors all media through the gateway's public IP.
+The gateway is transparent — the ElevenLabs SIP server sends an INVITE to the gateway IP, Kamailio rewrites the destination to the customer's SBC, and RTPEngine anchors all media through the gateway's public IP.
 
 ## Use Cases
 
@@ -43,14 +43,14 @@ The gateway is transparent — LiveKit SIP sends an INVITE to the gateway IP, Ka
 
 ### Prerequisites
 
-- `gcloud` CLI authenticated to `xi-playground`
+- `gcloud` CLI authenticated to `your-gcp-project`
 - Terraform >= 1.5
 - A customer SBC address to forward to
 
 ### 1. Provision infrastructure
 
 ```bash
-cd infra/sip-gateway/terraform
+cd kamailio-proxy/terraform
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars — set region, zone, etc.
 
@@ -60,7 +60,7 @@ terraform apply
 ```
 
 This creates:
-- GCE VM with Container-Optimized OS
+- GCE VM with Ubuntu 24.04 LTS
 - Static external IP
 - Firewall rules for SIP (5060), RTP (10000-20000), SSH
 
@@ -69,15 +69,15 @@ Note the output `sip_gateway_static_ip` — this is the IP customers will whitel
 ### 2. Deploy the SIP gateway stack
 
 ```bash
-cd infra/sip-gateway/scripts
+cd kamailio-proxy/scripts
 ./deploy.sh --customer-sbc sbc.customer.com --customer-sbc-port 5060
 ```
 
 This copies the Docker Compose stack to the VM, configures it, and starts Kamailio + RTPEngine.
 
-### 3. Configure LiveKit outbound trunk
+### 3. Configure ElevenLabs outbound trunk
 
-Point the LiveKit outbound trunk's `address` to the gateway instead of the customer's SBC directly:
+Point the outbound trunk's `address` to the gateway instead of the customer's SBC directly:
 
 ```python
 # Before (direct to customer SBC):
@@ -93,7 +93,7 @@ SIPOutboundTrunkConfig(
 )
 ```
 
-Or via the LiveKit API:
+Or via the API:
 ```json
 {
   "trunk": {
@@ -134,7 +134,7 @@ sudo bash install-onprem.sh \
 Or copy the script from this repo:
 
 ```bash
-scp scripts/install-onprem.sh root@turkish-host:/tmp/
+scp kamailio-proxy/scripts/install-onprem.sh root@turkish-host:/tmp/
 ssh root@turkish-host 'bash /tmp/install-onprem.sh \
     --external-ip 203.0.113.50 \
     --internal-ip 10.0.0.5 \
@@ -158,12 +158,7 @@ sudo bash install-onprem.sh \
     --auth-password 'SomeSecurePassword'
 ```
 
-Then in the Kamailio config at `/opt/sip-gateway/docker/kamailio/kamailio.cfg`,
-uncomment the `# route(AUTH);` line and restart:
-
-```bash
-docker compose -f /opt/sip-gateway/docker/docker-compose.yml restart kamailio
-```
+Auth is automatically enabled when `AUTH_USER` is set — no manual config editing needed.
 
 ### No NAT (public IP directly on interface)
 
@@ -215,52 +210,52 @@ If in-country isn't strictly required, nearest GCP regions:
 
 ### View logs
 ```bash
-gcloud compute ssh sip-gateway --project=xi-playground --zone=europe-west1-b \
+gcloud compute ssh sip-gateway --project=your-gcp-project --zone=europe-west1-b \
     --command='sudo docker compose -f /opt/sip-gateway/docker/docker-compose.yml logs -f'
 ```
 
 ### Restart stack
 ```bash
-gcloud compute ssh sip-gateway --project=xi-playground --zone=europe-west1-b \
+gcloud compute ssh sip-gateway --project=your-gcp-project --zone=europe-west1-b \
     --command='sudo docker compose -f /opt/sip-gateway/docker/docker-compose.yml restart'
 ```
 
 ### Update customer SBC address
 ```bash
-gcloud compute ssh sip-gateway --project=xi-playground --zone=europe-west1-b \
-    --command="sed -i 's/^CUSTOMER_SBC_ADDRESS=.*/CUSTOMER_SBC_ADDRESS=new-sbc.customer.com/' /opt/sip-gateway/.env && sudo docker compose -f /opt/sip-gateway/docker/docker-compose.yml restart kamailio"
+gcloud compute ssh sip-gateway --project=your-gcp-project --zone=europe-west1-b \
+    --command="sudo sed -i 's/^CUSTOMER_SBC_ADDRESS=.*/CUSTOMER_SBC_ADDRESS=new-sbc.customer.com/' /opt/sip-gateway/docker/.env && cd /opt/sip-gateway/docker && sudo docker compose --env-file .env up -d"
 ```
 
 ### Check RTPEngine stats
 ```bash
-gcloud compute ssh sip-gateway --project=xi-playground --zone=europe-west1-b \
+gcloud compute ssh sip-gateway --project=your-gcp-project --zone=europe-west1-b \
     --command='sudo docker exec sip-gateway-rtpengine rtpengine-ctl list sessions'
 ```
 
 ## How the Call Flow Works (Detail)
 
-1. **Backend calls LiveKit API** — `CreateSIPParticipant` with the outbound trunk that points to the gateway
-2. **LiveKit SIP server sends INVITE** — to `<gateway-ip>:5060` with the destination number in the R-URI
+1. **Backend triggers outbound call** — via the outbound trunk that points to the gateway
+2. **ElevenLabs SIP server sends INVITE** — to `<gateway-ip>:5060` with the destination number in the R-URI
 3. **Kamailio receives INVITE** — rewrites R-URI to `sip:<number>@<customer-sbc>:5060`
 4. **RTPEngine rewrites SDP** — replaces the media IP in the SDP with the gateway's public IP
 5. **Kamailio forwards INVITE** — to the customer's SBC
 6. **Customer SBC responds** — 100 Trying, 180 Ringing, 200 OK
-7. **Kamailio relays responses** — back to LiveKit SIP, RTPEngine rewrites SDP in responses too
-8. **RTP flows** — LiveKit ↔ RTPEngine ↔ Customer SBC (all through the gateway's public IP)
+7. **Kamailio relays responses** — back to ElevenLabs SIP, RTPEngine rewrites SDP in responses too
+8. **RTP flows** — ElevenLabs ↔ RTPEngine ↔ Customer SBC (all through the gateway's public IP)
 9. **BYE** — either side hangs up, Kamailio relays, RTPEngine cleans up the media session
 
 ## Multi-Tenant Extension
 
 The current setup is single-tenant (one customer SBC per gateway). To support multiple customers:
 
-1. **Use custom SIP headers** — LiveKit can send custom headers via `CreateSIPParticipant`. Kamailio can read a header like `X-SBC-Address` to determine the destination.
+1. **Use custom SIP headers** — ElevenLabs can send custom headers with outbound calls. Kamailio can read a header like `X-SBC-Address` to determine the destination.
 2. **Use a database** — Kamailio can look up routing by the From number or a custom header in a database.
-3. **Multiple outbound trunks** — each LiveKit outbound trunk points to the same gateway but with different SIP headers.
+3. **Multiple outbound trunks** — each outbound trunk points to the same gateway but with different SIP headers.
 
 ## File Structure
 
 ```
-infra/sip-gateway/
+kamailio-proxy/
 ├── terraform/
 │   ├── main.tf                  # GCE VM, static IP, firewall rules
 │   ├── variables.tf             # Configurable parameters
@@ -271,13 +266,14 @@ infra/sip-gateway/
 │   ├── .env.example             # Environment template
 │   ├── kamailio/
 │   │   ├── Dockerfile
-│   │   └── kamailio.cfg         # SIP routing configuration
+│   │   ├── kamailio.cfg         # SIP routing configuration
+│   │   └── entrypoint.sh        # Env var substitution into config
 │   └── rtpengine/
 │       └── Dockerfile
 ├── scripts/
-│   ├── startup.sh               # GCE startup script
 │   ├── deploy.sh                # Deploy stack to GCE instance
 │   ├── install-onprem.sh        # Self-contained on-prem/non-GCP installer
+│   ├── startup.sh               # GCE startup script
 │   └── test-sip.sh              # SIP OPTIONS smoke test
 └── README.md
 ```

@@ -1,210 +1,261 @@
-# SIP Gateway
+<p align="center">
+  <img src="https://img.shields.io/badge/SIP-Gateway-blue?style=for-the-badge&logo=webrtc&logoColor=white" alt="SIP Gateway" />
+</p>
 
-A regional SIP gateway that sits between [ElevenLabs](https://elevenlabs.io) (LiveKit SIP) and a customer's SBC / SIP trunk provider (e.g., Twilio). Two implementations are provided — pick the one that fits your use case.
+<h1 align="center">SIP Gateway</h1>
 
-## Why
+<p align="center">
+  Regional SIP gateway between ElevenLabs and customer SBCs — static IP, in-country presence, media anchoring.
+</p>
+
+<p align="center">
+  <a href="#quick-start"><img src="https://img.shields.io/badge/get_started-→-green?style=flat-square" alt="Get Started" /></a>
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License" />
+  <img src="https://img.shields.io/badge/terraform-%3E%3D1.5-844FBA?style=flat-square&logo=terraform&logoColor=white" alt="Terraform >= 1.5" />
+  <img src="https://img.shields.io/badge/docker-%3E%3D24.0-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker >= 24.0" />
+  <img src="https://img.shields.io/badge/kamailio-5.8-orange?style=flat-square" alt="Kamailio 5.8" />
+  <img src="https://img.shields.io/badge/asterisk-latest-red?style=flat-square&logo=asterisk&logoColor=white" alt="Asterisk" />
+  <img src="https://img.shields.io/badge/platform-GCP%20%7C%20on--prem-lightgrey?style=flat-square&logo=googlecloud&logoColor=white" alt="GCP | On-Prem" />
+</p>
+
+---
+
+## Problem
 
 ```mermaid
 graph LR
-    subgraph Problem
-        LK[LiveKit SIP Server] -->|INVITE| SBC[Customer SBC]
-    end
-
-    style Problem fill:#fee,stroke:#c00
+    LK[ElevenLabs SIP] -.->|"❌ Dynamic IPs<br/>❌ Outside country<br/>❌ No FQDN support"| SBC[Customer SBC]
+    style LK fill:#fee,stroke:#c33
+    style SBC fill:#fee,stroke:#c33
 ```
 
-- **No static IP** — LiveKit Cloud nodes have no static IP range. Legacy SBCs (Five9, etc.) require IP whitelisting.
-- **Regulatory** — Some countries (e.g., Turkey) require SIP INVITEs to originate from within the country.
-- **FQDN unsupported** — Some SBCs only accept IP addresses, not hostnames.
+| Issue | Impact |
+|-------|--------|
+| SIP server IPs are dynamic | Legacy SBCs (Five9, etc.) can't whitelist |
+| SIP INVITE originates outside country | Blocked by local telecom regulators (e.g., Turkey) |
+| SBC requires IP, not FQDN | Direct connection impossible |
+
+## Solution
 
 ```mermaid
 graph LR
-    subgraph Solution
-        LK[LiveKit SIP] -->|TCP 5060| GW[SIP Gateway<br/>Static IP / In-Region]
-        GW -->|SIP| SBC[Customer SBC /<br/>Twilio]
-        LK <-->|RTP/UDP| GW
-        GW <-->|RTP/UDP| SBC
-    end
-
-    style Solution fill:#efe,stroke:#0a0
+    LK[ElevenLabs SIP] -->|TCP 5060| GW["<b>SIP Gateway</b><br/>Static IP • In-Region"]
+    GW -->|SIP + RTP| SBC[Customer SBC / Twilio]
+    style GW fill:#dfd,stroke:#0a0,stroke-width:2px
 ```
 
-The gateway provides a **fixed IP**, **in-region presence**, and **media anchoring** (all RTP flows through it).
+Deploy a lightweight SIP gateway in any region. It provides a **fixed IP**, **in-country presence**, and **media anchoring** — all RTP audio flows through it.
+
+---
 
 ## Two Approaches
 
-| | [Kamailio + RTPEngine](./kamailio-proxy/) | [Asterisk B2BUA](./asterisk-b2bua/) |
-|---|---|---|
-| **Architecture** | Stateful SIP proxy + dedicated media relay | Full Back-to-Back User Agent (PBX) |
-| **SIP handling** | Forwards and rewrites headers, preserves Call-ID | Terminates and re-originates both call legs |
-| **Media** | RTPEngine: zero-copy RTP forwarding | Asterisk bridge: userspace media mixing |
-| **Overhead** | ~2ms per call | ~10-20ms per call |
-| **Concurrency** | ~1000+ calls/instance | ~50-100 calls/instance |
-| **Header passthrough** | Automatic (all headers forwarded) | Explicit (must map each custom header in dialplan) |
-| **Codec transcoding** | No (passthrough only) | Yes (can transcode between codecs) |
-| **IVR / call logic** | No | Yes (dialplan, DTMF, recording, etc.) |
-| **Config complexity** | ~150 lines of `kamailio.cfg` | ~200 lines of Asterisk PJSIP + dialplan |
-| **Best for** | Transparent relay, high scale, production | PoC, when you need call logic/transcoding |
+<table>
+<tr>
+<td width="50%" valign="top">
 
-### Decision flowchart
+### 🔹 [Kamailio + RTPEngine](./kamailio-proxy/)
+
+**Stateful SIP proxy** with dedicated media relay.
+
+- ~2ms overhead per call
+- ~1000+ concurrent calls
+- Automatic header passthrough
+- Zero-copy RTP forwarding
+- **Best for:** production, high scale, transparent relay
+
+</td>
+<td width="50%" valign="top">
+
+### 🔸 [Asterisk B2BUA](./asterisk-b2bua/)
+
+**Full Back-to-Back User Agent** (PBX engine).
+
+- Full codec transcoding support
+- IVR, DTMF, call recording at the gateway
+- Asterisk dialplan flexibility
+- **Best for:** PoC, when you need call logic at the edge
+
+</td>
+</tr>
+</table>
+
+### Comparison
+
+| | Kamailio + RTPEngine | Asterisk B2BUA |
+|---|:---:|:---:|
+| **Latency** | ~2ms | ~10-20ms |
+| **Max concurrent calls** | 1000+ | 50-100 |
+| **Header passthrough** | Automatic | Explicit mapping |
+| **Codec transcoding** | ✗ | ✓ |
+| **IVR / call logic** | ✗ | ✓ |
+| **SIP dialog** | Preserved (proxy) | Re-originated (B2BUA) |
+| **Config complexity** | ~150 lines | ~200 lines |
+
+### Which one?
 
 ```mermaid
 flowchart TD
-    A[Do you need transcoding,<br/>IVR, or call recording<br/>at the gateway?] -->|Yes| B[Asterisk B2BUA]
-    A -->|No| C[Do you need<br/>high concurrency<br/>>100 calls?]
-    C -->|Yes| D[Kamailio + RTPEngine]
-    C -->|No| E[Either works.<br/>Kamailio is lighter,<br/>Asterisk is more flexible.]
-
+    A{"Need transcoding, IVR,<br/>or recording at gateway?"} -->|Yes| B["<b>Asterisk B2BUA</b>"]
+    A -->|No| C{"Need >100<br/>concurrent calls?"}
+    C -->|Yes| D["<b>Kamailio + RTPEngine</b>"]
+    C -->|No| E["Either works — Kamailio<br/>is lighter for pure relay"]
+    style B fill:#ddf,stroke:#33a
     style D fill:#dfd,stroke:#0a0
-    style B fill:#ddf,stroke:#00a
 ```
+
+---
 
 ## Call Flow
 
 ```mermaid
 sequenceDiagram
-    participant LK as LiveKit SIP
+    participant EL as ElevenLabs SIP
     participant GW as SIP Gateway
-    participant SBC as Customer SBC / Twilio
+    participant SBC as Customer SBC
 
-    LK->>GW: INVITE sip:+1234@gateway:5060 (TCP)
-    Note over GW: Rewrite R-URI to SBC<br/>Anchor media via RTPEngine/Asterisk
-    GW->>SBC: INVITE sip:+1234@sbc.customer.com:5060
+    EL->>GW: INVITE sip:+1234@gateway:5060
+    Note over GW: Rewrite R-URI → customer SBC<br/>Anchor media (RTPEngine/Asterisk)
+    GW->>SBC: INVITE sip:+1234@sbc.customer.com
     SBC-->>GW: 100 Trying
-    GW-->>LK: 100 Trying
+    GW-->>EL: 100 Trying
     SBC-->>GW: 180 Ringing
-    GW-->>LK: 180 Ringing
+    GW-->>EL: 180 Ringing
     SBC-->>GW: 200 OK (SDP: SBC media IP)
-    Note over GW: Rewrite SDP with gateway IP
-    GW-->>LK: 200 OK (SDP: gateway IP)
-    LK->>GW: ACK
+    Note over GW: Rewrite SDP → gateway IP
+    GW-->>EL: 200 OK (SDP: gateway IP)
+    EL->>GW: ACK
 
-    Note over LK,SBC: RTP audio flows through gateway
-    LK-->>GW: RTP (UDP 10000-20000)
-    GW-->>SBC: RTP (UDP 10000-20000)
-    SBC-->>GW: RTP
-    GW-->>LK: RTP
+    rect rgb(240, 255, 240)
+        Note over EL,SBC: 🔊 RTP audio flows through gateway
+        EL->>GW: RTP (UDP)
+        GW->>SBC: RTP (UDP)
+        SBC->>GW: RTP
+        GW->>EL: RTP
+    end
 
     SBC->>GW: BYE
-    GW->>LK: BYE
-    LK-->>GW: 200 OK
-    GW-->>SBC: 200 OK
+    GW->>EL: BYE
 ```
 
-## Deployment Options
+---
 
-### Option 1: GCP (Terraform + gcloud)
+## Quick Start
 
-Best for: static IP whitelisting, quick PoC, when GCP has a region nearby.
+### GCP Deployment
 
-**Kamailio approach:**
+<details>
+<summary><b>Kamailio + RTPEngine</b></summary>
+
 ```bash
 cd kamailio-proxy/terraform
-cp terraform.tfvars.example terraform.tfvars  # edit region
+cp terraform.tfvars.example terraform.tfvars
+# Edit region, zone, project
+
 terraform init && terraform apply
 
 cd ../scripts
-./deploy.sh --customer-sbc sbc.customer.com
+./deploy.sh --customer-sbc your-trunk.pstn.twilio.com
 ```
 
-**Asterisk approach:**
+</details>
+
+<details>
+<summary><b>Asterisk B2BUA</b></summary>
+
 ```bash
 cd asterisk-b2bua
-PROJECT_ID=xi-playground \
+PROJECT_ID=your-project \
 TWILIO_TERMINATION_HOST="your-trunk.pstn.twilio.com" \
 bash deploy-gcp-middleware.sh
 ```
 
-See each folder's README for full GCP instructions.
+</details>
 
-### Option 2: On-Prem / Non-GCP (Turkey, etc.)
+### On-Prem / Non-GCP (Turkey, etc.)
 
-Best for: in-country regulatory compliance, GCP not available in region.
+<details>
+<summary><b>Kamailio + RTPEngine</b></summary>
 
-**Kamailio approach:**
 ```bash
 sudo bash kamailio-proxy/scripts/install-onprem.sh \
     --external-ip <PUBLIC_IP> \
     --internal-ip <PRIVATE_IP> \
-    --customer-sbc sbc.customer.com
+    --customer-sbc your-trunk.pstn.twilio.com
 ```
 
-**Asterisk approach:**
+</details>
+
+<details>
+<summary><b>Asterisk B2BUA</b></summary>
+
 ```bash
 sudo bash asterisk-b2bua/install-onprem.sh \
     --twilio-termination-host your-trunk.pstn.twilio.com \
     --external-ip <PUBLIC_IP>
 ```
 
-Both scripts:
-- Install Docker if missing (Debian/Ubuntu/CentOS)
-- Write all config files
-- Open firewall ports
-- Build and start the stack
-- Print what to configure on the ElevenLabs side
+</details>
 
-### Requirements
+Both scripts install Docker, write all configs, open firewall ports, and start the stack.
 
-| Resource | Minimum |
-|----------|---------|
-| OS | Ubuntu 22.04+, Debian 12+, CentOS 8+ |
-| CPU | 2 cores |
-| RAM | 2 GB |
-| Ports | TCP 5060, UDP 5060, UDP 10000-20000 |
-| IP | Static public IP (or NAT with port forwarding) |
+---
 
 ## ElevenLabs Configuration
 
-After deploying either approach, configure the ElevenLabs outbound trunk:
+After deploying, configure the outbound trunk:
 
 | Field | Value |
 |-------|-------|
-| **Address** | `<gateway-public-ip>` |
-| **Transport** | `TCP` |
-| **Auth** | Username/password if enabled on gateway |
+| **Address** | `<gateway-ip>` |
+| **Transport** | TCP |
+| **Auth** | Username/password (if enabled) |
 
-## Twilio Elastic SIP Configuration
+## Twilio Elastic SIP
 
-### Termination (ElevenLabs → Gateway → Twilio → PSTN)
+| Direction | Configuration |
+|-----------|---------------|
+| **Termination** (outbound) | Add `<gateway-ip>/32` to IP Access Control List |
+| **Origination** (inbound) | Add URI `sip:<gateway-ip>:5060;transport=tcp` |
 
-1. In Twilio Console → Elastic SIP Trunking → your trunk → **Termination**
-2. Under **Authentication → IP Access Control Lists**, add `<gateway-ip>/32`
+---
 
-### Origination (PSTN → Twilio → Gateway → ElevenLabs)
+## Requirements
 
-1. In Twilio Console → your trunk → **Origination**
-2. Add URI: `sip:<gateway-ip>:5060;transport=tcp`
+| Resource | Minimum |
+|----------|---------|
+| **OS** | Ubuntu 22.04+, Debian 12+, CentOS 8+ |
+| **CPU** | 2 cores |
+| **RAM** | 2 GB |
+| **Ports** | TCP 5060, UDP 5060, UDP 10000-20000 |
+| **IP** | Static public IP (or NAT with port forwarding) |
 
-## Folder Structure
+---
+
+## Project Structure
 
 ```
 sip-gateway/
-├── README.md                          # This file
-├── kamailio-proxy/                    # Kamailio + RTPEngine approach
-│   ├── README.md
-│   ├── docker/
-│   │   ├── docker-compose.yml
-│   │   ├── .env.example
-│   │   ├── kamailio/
-│   │   │   ├── Dockerfile
-│   │   │   ├── kamailio.cfg
-│   │   │   └── entrypoint.sh
-│   │   └── rtpengine/
-│   │       └── Dockerfile
-│   ├── terraform/
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   └── terraform.tfvars.example
-│   └── scripts/
-│       ├── deploy.sh
-│       ├── install-onprem.sh
-│       ├── startup.sh
-│       └── test-sip.sh
-└── asterisk-b2bua/                    # Asterisk B2BUA approach
-    ├── README.md
-    ├── deploy-gcp-middleware.sh
-    ├── startup-script.sh
-    ├── install-onprem.sh
-    └── onprem.env.example
+├── kamailio-proxy/              # Kamailio + RTPEngine
+│   ├── docker/                  #   Docker Compose stack
+│   ├── terraform/               #   GCP infrastructure
+│   ├── scripts/                 #   Deploy + on-prem installer
+│   └── README.md
+├── asterisk-b2bua/              # Asterisk B2BUA
+│   ├── deploy-gcp-middleware.sh #   GCP provisioning
+│   ├── install-onprem.sh        #   On-prem installer
+│   ├── startup-script.sh        #   VM bootstrap
+│   └── README.md
+└── README.md                    # This file
 ```
+---
+
+## License
+
+MIT
+
+---
+
+<p align="center">
+  <sub>Built for <a href="https://elevenlabs.io">ElevenLabs</a> Conversational AI telephony</sub>
+</p>
